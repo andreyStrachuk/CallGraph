@@ -24,8 +24,6 @@ namespace {
   }
 
   void closeDumpSession () {
-    *dumpFile << "}\n";
-
     dumpFile->close();
     delete dumpFile;
   }
@@ -59,6 +57,20 @@ namespace {
       FunctionType *funcType = FunctionType::get(retType, callParams, false);
       FunctionCallee collectData = F.getParent()->getOrInsertFunction("collectData", funcType);
 
+      std::vector<Type *> retParams = {
+        builder.getVoidTy() 
+      };
+
+      FunctionType *retFuncType = FunctionType::get(retType, retParams, false);
+      FunctionCallee writeToFile = F.getParent()->getOrInsertFunction("writeToFile", retFuncType);
+
+      std::vector<Type *> openParams = {
+        builder.getVoidTy() 
+      };
+
+      FunctionType *openFuncType = FunctionType::get(retType, openParams, false);
+      FunctionCallee openFile = F.getParent()->getOrInsertFunction("openFile", openFuncType);
+
       for (auto &B : F) {
         for (auto &I : B) {
 
@@ -81,8 +93,29 @@ namespace {
 
             builder.CreateCall(collectData, args);
           }
+
+          if (auto *ret = dyn_cast<ReturnInst>(&I)) {
+            if (F.getName() == "main") {
+              builder.SetInsertPoint(ret);
+
+              Value *voidType = ConstantInt::get(builder.getVoidTy(), 0);
+
+              Value *args[] = {voidType};
+
+              builder.CreateCall(writeToFile, args);
+            }
+          }
           
         }
+      }
+
+      if (F.getName() == "main") {
+        BasicBlock &entryBB = F.getEntryBlock();
+        builder.SetInsertPoint(&entryBB.front());
+
+        Value *voidType = ConstantInt::get(builder.getVoidTy(), 0);
+        Value *args[] = {voidType};
+        builder.CreateCall(openFile, args);
       }
 
       return true;
