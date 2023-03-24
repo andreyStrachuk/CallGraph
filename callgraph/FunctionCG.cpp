@@ -18,9 +18,7 @@ namespace {
   raw_fd_ostream *dumpFile;
 
   void openDumpSession () {
-    dumpFile = new raw_fd_ostream("dump_dot.txt", EC);
-
-    *dumpFile << "digraph D {\n";
+    dumpFile = new raw_fd_ostream("inter.txt", EC, sys::fs::OF_Append);
   }
 
   void closeDumpSession () {
@@ -39,11 +37,18 @@ namespace {
       closeDumpSession();
     }
 
-    std::vector<StringRef> funcNames;
+    std::vector<u_int64_t> funcHashes;
 
     virtual bool runOnFunction(Function &F) override {
-      funcNames.push_back(F.getName());
-      *dumpFile << (uint64_t)&F << " [fillcolor=cyan, style=\"filled\", label=\"" << F.getName() << "\"];\n";
+
+      uint64_t callerHash = std::hash<std::string>()(F.getName());
+      StringRef callerName = F.getName();
+
+      if (callerName == "main") {
+        funcHashes.push_back(callerHash);
+      }
+
+      *dumpFile << callerHash << " [fillcolor=cyan, style=\"filled\", label=\"" << F.getName() << "\"];\n";
 
       LLVMContext &ctx = F.getContext();
       IRBuilder<> builder(ctx);
@@ -78,24 +83,25 @@ namespace {
             Function *calledFunc = call->getCalledFunction();
             StringRef calledFuncName = calledFunc->getName();
 
-            if (std::find(funcNames.begin(), funcNames.end(), calledFuncName) == 
-                funcNames.end()) {
-              funcNames.push_back(calledFuncName);
-              *dumpFile << (uint64_t)(calledFunc) << " [fillcolor=cyan, style=\"filled\", label=\"" << calledFuncName << "\"];\n";
+            uint64_t calledHash = std::hash<std::string>()(calledFuncName);
+
+            if (std::find(funcHashes.begin(), funcHashes.end(), calledHash) == funcHashes.end()) {
+              funcHashes.push_back(calledHash);
+              *dumpFile << calledHash << " [fillcolor=cyan, style=\"filled\", label=\" " << calledFuncName << " \" ];\n";
             }
             
             builder.SetInsertPoint(call);
 
-            Value *callerAddr = ConstantInt::get(builder.getInt64Ty(), (int64_t)&F);
-            Value *calleeAddr = ConstantInt::get(builder.getInt64Ty(), (int64_t)calledFunc);
+            Value *callerHashValue = ConstantInt::get(builder.getInt64Ty(), callerHash);
+            Value *calleeHashValue = ConstantInt::get(builder.getInt64Ty(), calledHash);
 
-            Value *args[] = {callerAddr, calleeAddr};
+            Value *args[] = {callerHashValue, calleeHashValue};
 
             builder.CreateCall(collectData, args);
           }
 
           if (auto *ret = dyn_cast<ReturnInst>(&I)) {
-            if (F.getName() == "main") {
+            if (callerName == "main") {
               builder.SetInsertPoint(ret);
 
               Value *voidType = ConstantInt::get(builder.getVoidTy(), 0);
@@ -109,7 +115,7 @@ namespace {
         }
       }
 
-      if (F.getName() == "main") {
+      if (callerName == "main") {
         BasicBlock &entryBB = F.getEntryBlock();
         builder.SetInsertPoint(&entryBB.front());
 

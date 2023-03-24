@@ -1,39 +1,94 @@
 #include <stdio.h>
 #include <iostream>
+#include <algorithm>
+#include <fstream>
 #include <map>
+#include <vector>
 
-std::map<std::pair<int64_t, int64_t>, int64_t> funcTable;
-FILE *output;
+#include "stringLib.h"
+
+std::map <std::pair<u_int64_t, u_int64_t>, int> funcHashTable;
+std::map <u_int64_t, char *> funcNames;
+std::vector <u_int64_t> hashesInFile;
+
+std::ofstream output;
+FILE *input;
 
 extern "C"
-void collectData (const int64_t callerAddr, const int64_t calleeAddr) {
-    printf ("Addresses: %ld %ld\n", callerAddr, calleeAddr);
-    std::pair<int64_t, int64_t> funcPair{callerAddr, calleeAddr};
+void collectData (const u_int64_t callerHash, const u_int64_t calleeHash) {
+    printf ("Hashes: %lu %lu\n", callerHash, calleeHash);
+    std::pair<u_int64_t, u_int64_t> funcPair{callerHash, calleeHash};
 
-    auto isFound = funcTable.find(funcPair);
-    if (isFound == funcTable.end()) {
-        funcTable[funcPair] = 1;
+    auto isFound = funcHashTable.find(funcPair);
+    if (isFound == funcHashTable.end()) {
+        funcHashTable[funcPair] = 1;
     }
     else {
-        funcTable[funcPair] += 1;
+        funcHashTable[funcPair] += 1;
     }
 }
 
 extern "C"
 void openFile () {
     printf ("I am in open file!\n");
-    output = fopen ("dump_dot.txt", "a");
+    input = fopen("inter.txt", "r");
+    if (!input) {
+        std::cout << "Unable to open file!\n";
+    }
+}
+
+static void inline putNameIntoFile (std::vector<u_int64_t> &hashesInFile, const u_int64_t hash) {
+    hashesInFile.push_back(hash);
+
+    char *line = funcNames[hash];
+
+    output << line << "\n";
 }
 
 extern "C"
 void writeToFile () {
     printf ("I am in write to file!\n");
+    
+    size_t fileSize = getFileSize (input);
+    size_t numberOfStrings = getNumberOfStrings (input);
 
-    for (auto &MO : funcTable) {
-        fprintf (output, "%ld -> %ld [label = %ld]\n", MO.first.first, MO.first.second, MO.second);
+    char *text = bufferAlloc(&fileSize, input);
+    if (!text)
+        return;
+    fclose (input);
+    std::remove("inter.txt");
+
+    char **arrOfPtrs = new char*[numberOfStrings];
+    initializeArrOfPointers (arrOfPtrs, numberOfStrings, text);
+
+    for (int i = 0; i < numberOfStrings; i++) {
+        u_int64_t hash = getHash(arrOfPtrs[i]);
+
+        funcNames[hash] = arrOfPtrs[i];
     }
 
-    fprintf (output, "}\n");
+    output.open ("dump_dot.txt", std::ofstream::trunc);
 
-    fclose(output);
+    output << "digraph D {\n";
+
+    for (auto &MO : funcHashTable) {
+
+        u_int64_t callerHash = MO.first.first;
+        u_int64_t calleeHash = MO.first.second;
+        int numberOfCalls = MO.second;
+
+        if (std::find(hashesInFile.begin(), hashesInFile.end(), callerHash) == hashesInFile.end()) {
+            putNameIntoFile (hashesInFile, callerHash);
+        }
+
+        if (std::find(hashesInFile.begin(), hashesInFile.end(), calleeHash) == hashesInFile.end()) {
+            putNameIntoFile (hashesInFile, calleeHash);
+        }
+
+        output << callerHash << " -> " << calleeHash << "[label = \"" << numberOfCalls << "\"];\n";
+    }
+
+    output << "}\n";
+
+    output.close();
 }
