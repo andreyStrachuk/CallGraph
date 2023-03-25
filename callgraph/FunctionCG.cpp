@@ -40,7 +40,6 @@ namespace {
     std::vector<u_int64_t> funcHashes;
 
     virtual bool runOnFunction(Function &F) override {
-
       uint64_t callerHash = std::hash<std::string>()(F.getName());
       StringRef callerName = F.getName();
 
@@ -113,15 +112,6 @@ namespace {
           }
           
         }
-      }
-
-      if (callerName == "main") {
-        BasicBlock &entryBB = F.getEntryBlock();
-        builder.SetInsertPoint(&entryBB.front());
-
-        Value *voidType = ConstantInt::get(builder.getVoidTy(), 0);
-        Value *args[] = {voidType};
-        builder.CreateCall(openFile, args);
       }
 
       return true;

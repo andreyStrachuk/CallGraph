@@ -16,7 +16,6 @@ FILE *input;
 
 extern "C"
 void collectData (const u_int64_t callerHash, const u_int64_t calleeHash) {
-    printf ("Hashes: %lu %lu\n", callerHash, calleeHash);
     std::pair<u_int64_t, u_int64_t> funcPair{callerHash, calleeHash};
 
     auto isFound = funcHashTable.find(funcPair);
@@ -30,7 +29,6 @@ void collectData (const u_int64_t callerHash, const u_int64_t calleeHash) {
 
 extern "C"
 void openFile () {
-    printf ("I am in open file!\n");
     input = fopen("inter.txt", "r");
     if (!input) {
         std::cout << "Unable to open file!\n";
@@ -47,8 +45,8 @@ static void inline putNameIntoFile (std::vector<u_int64_t> &hashesInFile, const 
 
 extern "C"
 void writeToFile () {
-    printf ("I am in write to file!\n");
-    
+    openFile();
+
     size_t fileSize = getFileSize (input);
     size_t numberOfStrings = getNumberOfStrings (input);
 
@@ -56,7 +54,6 @@ void writeToFile () {
     if (!text)
         return;
     fclose (input);
-    std::remove("inter.txt");
 
     char **arrOfPtrs = new char*[numberOfStrings];
     initializeArrOfPointers (arrOfPtrs, numberOfStrings, text);
@@ -89,6 +86,7 @@ void writeToFile () {
     }
 
     output << "}\n";
-
+    
+    delete[] arrOfPtrs;
     output.close();
 }
